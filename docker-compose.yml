@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  django:
+    build: ./backend
+    container_name: invoice_django
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - media_data:/app/media
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=postgresql://invoiceuser:invoicepass@db:5432/invoicedb
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook/invoice
+    depends_on:
+      - db
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - invoice_network
+
+  db:
+    image: postgres:15-alpine
+    container_name: invoice_db
+    environment:
+      POSTGRES_USER: invoiceuser
+      POSTGRES_PASSWORD: invoicepass
+      POSTGRES_DB: invoicedb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - invoice_network
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: invoice_n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - WEBHOOK_URL=http://n8n:5678/
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+    networks:
+      - invoice_network
+
+volumes:
+  postgres_data:
+  n8n_data:
+  media_data:
+
+networks:
+  invoice_network:
+    driver: bridge
